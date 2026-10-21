@@ -1,0 +1,26 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build php:7.4-fpm with the PHP2Shell backport
+        run: docker build -t php74-backport .
+      - name: Verify the backport is in the binary
+        run: |
+          docker run --rm php74-backport php -v
+          docker run --rm php74-backport cat /usr/local/etc/php/php2shell-backport
+          docker run --rm php74-backport sh -c "nm -D /usr/local/bin/php | grep ' T zend_mm_safe_error_ex'"
+          docker run --rm php74-backport php-fpm -t
+      - name: Extensions still build against the patched sources
+        run: docker run --rm php74-backport sh -c "docker-php-ext-install -j2 pdo_mysql >/dev/null && php -m | grep -i pdo_mysql"
+      - name: pecl from tarball (PEAR on 7.4 cannot read the REST index any more)
+        run: |
+          docker run --rm php74-backport sh -c "curl -fsSL -o /tmp/redis.tgz https://pecl.php.net/get/redis-6.0.2.tgz && pecl install /tmp/redis.tgz >/dev/null && docker-php-ext-enable redis && php -m | grep -i '^redis'"
